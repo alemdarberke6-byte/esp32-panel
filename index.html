@@ -1,0 +1,222 @@
+<!doctype html>
+<html lang="tr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="ESP Kontrol">
+<title>ESP Kontrol</title>
+<style>
+  :root {
+    --bg: #f4f5f7; --card: #ffffff; --text: #14161a; --muted: #6b7280;
+    --border: #e3e5e9; --accent: #2563eb; --ok: #16a34a; --bad: #dc2626; --warn: #d97706;
+    --led: #3b82f6; --led-glow: rgba(59,130,246,.55); --input: #f9fafb;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+      --bg: #0d0f13; --card: #171a21; --text: #eef0f4; --muted: #9aa1ad;
+      --border: #262b35; --accent: #60a5fa; --ok: #4ade80; --bad: #f87171; --warn: #fbbf24;
+      --led: #60a5fa; --led-glow: rgba(96,165,250,.6); --input: #11141a;
+    }
+  }
+  :root[data-theme="dark"] {
+    --bg: #0d0f13; --card: #171a21; --text: #eef0f4; --muted: #9aa1ad;
+    --border: #262b35; --accent: #60a5fa; --ok: #4ade80; --bad: #f87171; --warn: #fbbf24;
+    --led: #60a5fa; --led-glow: rgba(96,165,250,.6); --input: #11141a;
+  }
+  * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+  body {
+    margin: 0; background: var(--bg); color: var(--text);
+    font: 16px/1.4 -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+    padding: max(16px, env(safe-area-inset-top)) 16px max(24px, env(safe-area-inset-bottom));
+  }
+  main { max-width: 480px; margin: 0 auto; display: grid; gap: 14px; }
+  header { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+  h1 { font-size: 22px; margin: 0; }
+  .pill { display: inline-flex; align-items: center; gap: 6px; font-size: 13px; color: var(--muted);
+          border: 1px solid var(--border); border-radius: 999px; padding: 4px 10px; background: var(--card); }
+  .dot { width: 8px; height: 8px; border-radius: 50%; background: var(--muted); }
+  .dot.ok { background: var(--ok); } .dot.bad { background: var(--bad); } .dot.warn { background: var(--warn); }
+  .card { background: var(--card); border: 1px solid var(--border); border-radius: 16px; padding: 16px; }
+  .row { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
+  .muted { color: var(--muted); font-size: 13px; }
+  .bulb { width: 120px; height: 120px; border-radius: 50%; margin: 12px auto 16px; border: 2px solid var(--border);
+          background: var(--input); transition: all .2s ease; }
+  .bulb.on { background: var(--led); border-color: var(--led); box-shadow: 0 0 40px 8px var(--led-glow); }
+  .btns { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 8px; }
+  button { font: inherit; border: 1px solid var(--border); background: var(--input); color: var(--text);
+           border-radius: 12px; padding: 14px 8px; font-weight: 600; cursor: pointer; }
+  button.primary { background: var(--accent); border-color: var(--accent); color: #fff; }
+  button:disabled { opacity: .45; cursor: default; }
+  button.link { background: none; border: none; padding: 6px; color: var(--accent); font-weight: 500; }
+  label { display: grid; gap: 4px; font-size: 13px; color: var(--muted); }
+  input { font: inherit; color: var(--text); background: var(--input); border: 1px solid var(--border);
+          border-radius: 10px; padding: 10px 12px; width: 100%; }
+  form { display: grid; gap: 10px; }
+  details summary { cursor: pointer; font-weight: 600; }
+  #log { font: 12px/1.5 ui-monospace, Menlo, Consolas, monospace; color: var(--muted);
+         max-height: 180px; overflow: auto; white-space: pre-wrap; word-break: break-all; margin: 8px 0 0; }
+  .info { display: grid; grid-template-columns: auto 1fr; gap: 2px 12px; font-size: 13px; margin-top: 10px; }
+  .info dt { color: var(--muted); } .info dd { margin: 0; text-align: right; font-variant-numeric: tabular-nums; }
+</style>
+</head>
+<body>
+<main>
+  <header>
+    <h1>ESP Kontrol</h1>
+    <span class="pill"><span id="brokerDot" class="dot"></span><span id="brokerTxt">Bağlı değil</span></span>
+  </header>
+
+  <section class="card" id="ledCard">
+    <div class="row">
+      <div>
+        <div style="font-weight:600">Mavi LED</div>
+        <div class="muted" id="topicTxt">—</div>
+      </div>
+      <span class="pill"><span id="devDot" class="dot"></span><span id="devTxt">Cihaz ?</span></span>
+    </div>
+    <div class="bulb" id="bulb" aria-label="LED durumu"></div>
+    <div class="row" style="justify-content:center;margin-bottom:12px">
+      <strong id="stateTxt">Durum bilinmiyor</strong>
+    </div>
+    <div class="btns">
+      <button data-cmd="OFF">Kapat</button>
+      <button data-cmd="TOGGLE" class="primary">Değiştir</button>
+      <button data-cmd="ON">Aç</button>
+    </div>
+    <dl class="info" id="info" hidden></dl>
+  </section>
+
+  <section class="card">
+    <details id="settings">
+      <summary>Bağlantı ayarları</summary>
+      <form id="cfgForm" style="margin-top:12px" autocomplete="off">
+        <label>Broker host <input name="host" placeholder="xxxx.ala.eu-central-1.emqxsl.com" required autocapitalize="off"></label>
+        <label>WebSocket (WSS) port <input name="port" type="number" value="8084" required></label>
+        <label>Kullanıcı adı <input name="user" required autocapitalize="off"></label>
+        <label>Şifre <input name="pass" type="password" required></label>
+        <label>Cihaz topic kökü <input name="base" value="home/c3-led" required autocapitalize="off"></label>
+        <button class="primary" type="submit">Kaydet ve bağlan</button>
+        <div class="muted">Bilgiler sadece bu cihazın tarayıcısında saklanır.</div>
+        <button class="link" type="button" id="forget">Kayıtlı bilgileri sil</button>
+      </form>
+    </details>
+  </section>
+
+  <section class="card">
+    <details>
+      <summary>Kayıt</summary>
+      <pre id="log"></pre>
+    </details>
+  </section>
+</main>
+
+<script src="https://unpkg.com/mqtt@5.10.1/dist/mqtt.min.js"></script>
+<script>
+(() => {
+  const KEY = "espctl.cfg.v1";
+  const $ = (id) => document.getElementById(id);
+  const form = $("cfgForm");
+  let client = null, cfg = null;
+
+  const log = (m) => {
+    const t = new Date().toLocaleTimeString();
+    const el = $("log");
+    el.textContent = `${t} ${m}\n` + el.textContent.slice(0, 4000);
+  };
+  const setPill = (dot, txt, cls, text) => { $(dot).className = "dot " + (cls || ""); $(txt).textContent = text; };
+
+  function load() {
+    try { return JSON.parse(localStorage.getItem(KEY)) || null; } catch { return null; }
+  }
+  function save(c) { try { localStorage.setItem(KEY, JSON.stringify(c)); } catch {} }
+
+  function fillForm(c) { for (const k of ["host", "port", "user", "pass", "base"]) if (c && c[k] != null) form[k].value = c[k]; }
+
+  function setButtons(on) { document.querySelectorAll("[data-cmd]").forEach(b => b.disabled = !on); }
+
+  function showState(s) {
+    const on = s === "ON";
+    $("bulb").classList.toggle("on", on);
+    $("stateTxt").textContent = s ? (on ? "Açık" : "Kapalı") : "Durum bilinmiyor";
+  }
+
+  function showInfo(json) {
+    try {
+      const i = JSON.parse(json), el = $("info");
+      el.innerHTML = "";
+      for (const [k, v] of Object.entries({ IP: i.ip, RSSI: i.rssi + " dBm", MAC: i.mac, ID: i.id })) {
+        el.insertAdjacentHTML("beforeend", `<dt>${k}</dt><dd></dd>`);
+        el.lastElementChild.textContent = v;
+      }
+      el.hidden = false;
+    } catch {}
+  }
+
+  function connect(c) {
+    if (client) { client.end(true); client = null; }
+    cfg = c;
+    const base = c.base.replace(/\/+$/, "");
+    const T = { status: `${base}/status`, info: `${base}/info`, state: `${base}/led/state`, set: `${base}/led/set` };
+    $("topicTxt").textContent = base;
+    setButtons(false); showState(null);
+    setPill("brokerDot", "brokerTxt", "warn", "Bağlanıyor…");
+    setPill("devDot", "devTxt", "", "Cihaz ?");
+
+    client = mqtt.connect(`wss://${c.host}:${c.port}/mqtt`, {
+      username: c.user, password: c.pass,
+      clientId: "panel-" + Math.random().toString(16).slice(2, 10),
+      clean: true, reconnectPeriod: 3000, connectTimeout: 10000, protocolVersion: 4,
+    });
+
+    client.on("connect", () => {
+      setPill("brokerDot", "brokerTxt", "ok", "Broker bağlı");
+      log("broker bağlandı");
+      client.subscribe([T.status, T.info, T.state], { qos: 1 });
+      setButtons(true);
+    });
+    client.on("reconnect", () => setPill("brokerDot", "brokerTxt", "warn", "Yeniden bağlanıyor…"));
+    client.on("close", () => { setPill("brokerDot", "brokerTxt", "bad", "Bağlantı yok"); setButtons(false); });
+    client.on("error", (e) => log("hata: " + (e && e.message || e)));
+    client.on("message", (topic, payload) => {
+      const s = payload.toString();
+      log(`← ${topic} : ${s}`);
+      if (topic === T.state) showState(s);
+      else if (topic === T.status) setPill("devDot", "devTxt", s === "online" ? "ok" : "bad", s === "online" ? "Cihaz çevrimiçi" : "Cihaz çevrimdışı");
+      else if (topic === T.info) showInfo(s);
+    });
+
+    document.querySelectorAll("[data-cmd]").forEach(b => b.onclick = () => {
+      if (!client || !client.connected) return;
+      client.publish(T.set, b.dataset.cmd, { qos: 1 });
+      log(`→ ${T.set} : ${b.dataset.cmd}`);
+    });
+  }
+
+  form.addEventListener("submit", (e) => {
+    e.preventDefault();
+    const c = Object.fromEntries(new FormData(form));
+    c.port = Number(c.port) || 8084;
+    c.host = c.host.trim(); c.user = c.user.trim(); c.base = c.base.trim();
+    save(c);
+    $("settings").open = false;
+    connect(c);
+  });
+
+  $("forget").addEventListener("click", () => {
+    try { localStorage.removeItem(KEY); } catch {}
+    if (client) client.end(true);
+    form.reset();
+    setPill("brokerDot", "brokerTxt", "", "Bağlı değil");
+    log("kayıtlı bilgiler silindi");
+  });
+
+  setButtons(false);
+  const saved = load();
+  if (saved) { fillForm(saved); connect(saved); } else { $("settings").open = true; }
+})();
+</script>
+</body>
+</html>
